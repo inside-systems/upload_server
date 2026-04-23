@@ -7,13 +7,15 @@ const fsSync = require('fs');
 const { exec } = require('child_process');
 const util = require('util');
 const execPromise = util.promisify(exec);
+const exphbs = require('hbs');
 
 // Configuration from environment
 const APP_PORT = process.env.APP_PORT || 80;
 const APP_IP = process.env.APP_IP || '';
 
 const BASE_DIR = path.resolve(__dirname);
-const indexPath = path.join(BASE_DIR, 'www', 'up.html');
+const viewsDir = path.join(BASE_DIR, 'views');
+const publicDir = path.join(BASE_DIR, 'public');
 const tmpDir = path.join(BASE_DIR, 'tmp');
 const videoDir = path.join(BASE_DIR, 'Video');
 
@@ -45,6 +47,14 @@ const app = express();
 const server = http.createServer(app);
 const io = socketIO(server);
 
+// Configure Handlebars template engine
+app.set('view engine', 'hbs');
+app.set('views', viewsDir);
+exphbs.registerPartials(path.join(viewsDir, 'partials'));
+
+// Serve static files from public directory
+app.use(express.static(publicDir));
+
 // Ensure directories exist
 async function ensureDirectories() {
     try {
@@ -58,17 +68,21 @@ async function ensureDirectories() {
     }
 }
 
-// Serve static HTML file
+// Serve index page with Handlebars template
 app.get('/', async (req, res) => {
     try {
-        logger.info('Serving index.html', { path: indexPath });
-        const data = await fs.readFile(indexPath);
-        res.writeHead(200, { 'Content-Type': 'text/html' });
-        res.end(data);
+        logger.info('Rendering index page', { view: 'index' });
+        res.render('index', {
+            title: 'Animated Upload File Button',
+            heading: 'Animated Upload File Button',
+            description: 'This input supports drag and drop too, try it!',
+            noFileText: 'No file selected',
+            chooseFileText: 'Choose file',
+            uploadingText: 'Uploading...'
+        });
     } catch (error) {
-        logger.error('Error loading index.html', error);
-        res.writeHead(500);
-        res.end('Error loading index.html');
+        logger.error('Error rendering index page', error);
+        res.status(500).send('Error loading page');
     }
 });
 
