@@ -153,26 +153,52 @@ io.on('connection', (socket) => {
             if (Files[Name].Downloaded === Files[Name].FileSize) {
                 logger.info('File upload complete', { fileName: Name, totalSize: Files[Name].FileSize });
                 
-                const filePath = path.join(tmpDir, Name);
-                const writePath = path.join(videoDir, Name);
+                const tmpPath = path.join(tmpDir, Name);
+                const videoPath = path.join(videoDir, Name);
                 
-                await fs.writeFile(filePath, Files[Name].Data, 'binary');
+                // Write file using same approach as original - with file handler
+                await new Promise((resolve, reject) => {
+                    fsSync.write(Files[Name].Handler, Files[Name].Data, null, 'Binary', (err, written) => {
+                        if (err) {
+                            logger.error('Error writing file', err);
+                            reject(err);
+                        } else {
+                            resolve(written);
+                        }
+                    });
+                });
                 logger.info('File written to tmp', { fileName: Name });
 
-                // Move file to Video directory
-                await fs.copyFile(filePath, writePath);
-                logger.info('File copied to Video directory', { fileName: Name });
+                // Move file to Video directory using streams (like original)
+                await new Promise((resolve, reject) => {
+                    const inp = fsSync.createReadStream(tmpPath);
+                    const out = fsSync.createWriteStream(videoPath);
+                    inp.pipe(out);
+                    inp.on('end', () => {
+                        logger.info('File copied to Video directory', { fileName: Name });
+                        resolve();
+                    });
+                    inp.on('error', reject);
+                    out.on('error', reject);
+                });
 
                 // Generate thumbnail for MP4 files
-                let base64str;
-                if (Name.endsWith('.mp4')) {
+                let base64str = '';
+                const fileType = Name.split('.').pop().toLowerCase();
+                
+                if (fileType === 'mp4') {
                     try {
                         const thumbPath = path.join(videoDir, `${Name}.jpg`);
-                        await execPromise(`ffmpeg -i "${writePath}" -ss 00:01 -r 1 -an -vframes 1 -f mjpeg "${thumbPath}"`);
+                        const ffmpegCmd = `ffmpeg -i "${videoPath}" -ss 00:01 -r 1 -an -vframes 1 -f mjpeg "${thumbPath}"`;
+                        logger.info('Running FFmpeg', { command: ffmpegCmd });
+                        
+                        await execPromise(ffmpegCmd);
                         logger.info('Thumbnail generated', { fileName: Name, thumbPath });
                         
-                        const thumbData = await fs.readFile(thumbPath);
-                        base64str = thumbData.toString('base64');
+                        // Read thumbnail and convert to base64 (like original)
+                        const thumbData = fsSync.readFileSync(thumbPath);
+                        base64str = Buffer.from(thumbData).toString('base64');
+                        logger.info('Thumbnail encoded to base64', { fileName: Name, size: base64str.length });
                     } catch (ffmpegError) {
                         logger.error('FFmpeg error', ffmpegError);
                         base64str = '';
@@ -181,16 +207,17 @@ io.on('connection', (socket) => {
                     logger.info('Non-MP4 file, using default image', { fileName: Name });
                     try {
                         const defaultImgPath = path.join(BASE_DIR, 'file.png');
-                        const imgData = await fs.readFile(defaultImgPath);
-                        base64str = imgData.toString('base64');
+                        const imgData = fsSync.readFileSync(defaultImgPath);
+                        base64str = Buffer.from(imgData).toString('base64');
                     } catch (err) {
+                        logger.warn('Default image not found', err);
                         base64str = '';
                     }
                 }
 
-                // Clean up temp file
+                // Clean up temp file (like original - delete from root path issue fixed)
                 try {
-                    await fs.unlink(filePath);
+                    await fs.unlink(tmpPath);
                     logger.info('Temp file deleted', { fileName: Name });
                 } catch (unlinkErr) {
                     logger.warn('Failed to delete temp file', { fileName: Name, error: unlinkErr.message });
@@ -202,17 +229,28 @@ io.on('connection', (socket) => {
                 }
 
                 socket.emit('Done', { Image: base64str });
-                logger.info('Upload completed and emitted to client', { fileName: Name });
+                logger.info('Upload completed and emitted to client', { fileName: Name, hasImage: !!base64str });
                 
                 // Clean up Files entry
                 delete Files[Name];
 
             } else if (Files[Name].Data.length > 10485760) {
-                // Buffer reached 10MB, write to disk
+                // Buffer reached 10MB, write to disk (like original)
                 logger.debug('Buffer full, writing to disk', { fileName: Name, bufferSize: Files[Name].Data.length });
                 
-                const filePath = path.join(tmpDir, Name);
-                await fs.appendFile(filePath, Files[Name].Data, 'binary');
+                const tmpPath = path.join(tmpDir, Name);
+                
+                await new Promise((resolve, reject) => {
+                    fsSync.write(Files[Name].Handler, Files[Name].Data, null, 'Binary', (err, written) => {
+                        if (err) {
+                            logger.error('Error writing buffer to disk', err);
+                            reject(err);
+                        } else {
+                            resolve(written);
+                        }
+                    });
+                });
+                
                 Files[Name].Data = "";
                 
                 const Place = Files[Name].Downloaded / 524288;
