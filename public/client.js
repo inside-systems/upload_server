@@ -76,10 +76,38 @@ function uploadFile(file) {
                         upload.classList.remove("uploading");
                         uploadFilename.innerText = `${file.name} - Uploaded!`;
                         
+                        // Display preview image if available
+                        if (data.Image && data.Image.length > 0) {
+                            logger.info('Displaying preview image');
+                            
+                            // Remove existing preview if any
+                            const existingPreview = document.querySelector('.preview-image');
+                            if (existingPreview) {
+                                existingPreview.remove();
+                            }
+                            
+                            // Create and show preview image
+                            const img = document.createElement('img');
+                            img.src = 'data:image/jpeg;base64,' + data.Image;
+                            img.className = 'preview-image';
+                            img.style.maxWidth = '300px';
+                            img.style.maxHeight = '200px';
+                            img.style.marginTop = '20px';
+                            img.style.borderRadius = '10px';
+                            img.style.boxShadow = '0 4px 8px rgba(0,0,0,0.2)';
+                            img.style.display = 'block';
+                            
+                            // Insert after upload wrapper
+                            const uploadWrapper = document.querySelector('.upload-wrapper');
+                            uploadWrapper.parentNode.insertBefore(img, uploadWrapper.nextSibling);
+                            
+                            logger.info('Preview image displayed successfully');
+                        }
+                        
                         // Reset after delay
                         setTimeout(() => {
                             location.reload();
-                        }, 3000);
+                        }, 5000);
                     } catch (error) {
                         logger.error('Error in Done handler', error);
                     }
