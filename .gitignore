@@ -1,0 +1,16 @@
+```
+# Dependencies
+node_modules/
+
+# Logs
+*.log
+server.log
+
+# Environment variables
+.env
+.env.local
+*.env.*
+
+# Package lock file
+package-lock.json
+```
